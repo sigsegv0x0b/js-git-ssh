@@ -1,0 +1,20 @@
+{
+  "name": "jsgit-ssh-shallow-clone",
+  "version": "0.1.0",
+  "description": "Pure-JS (no native modules, no git binary) shallow git clone over SSH, built on isomorphic-git + ssh2",
+  "type": "module",
+  "bin": {
+    "jsgit": "./bin/jsgit.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "diff": "^9.0.0",
+    "isomorphic-git": "^1.40.0",
+    "ssh2": "^1.17.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
