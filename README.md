@@ -1,8 +1,8 @@
 # jsgit
 
-A pure-JavaScript git client for Node — no native modules, no `git` binary required. Clones, branches, checks out, and pushes over SSH, built on [`isomorphic-git`](https://isomorphic-git.org/) + [`ssh2`](https://github.com/mscdex/ssh2).
+**All the git logic lives in [`isomorphic-git`](https://isomorphic-git.org/)** — the hard work of object storage, refs, index/working-tree handling, packing, and protocol framing is done entirely by that library. This project is a small add-on around it, contributing exactly one thing: an **SSH transport** that isomorphic-git lacks out of the box.
 
-`isomorphic-git` only ships HTTP(S) transports out of the box. This project adds an SSH transport by implementing an isomorphic-git-compatible `http` client shim that speaks `git-upload-pack`/`git-receive-pack` over an `ssh2` exec channel instead of real HTTP.
+isomorphic-git ships only HTTP(S) transports. This project implements an isomorphic-git-compatible `http` client shim that speaks `git-upload-pack`/`git-receive-pack` over an [`ssh2`](https://github.com/mscdex/ssh2) exec channel instead of real HTTP. On top of that shim sits a thin CLI (`jsgit`) for Node — no native modules, no `git` binary required — that clones, branches, checks out, and pushes over SSH, delegating every git operation back to isomorphic-git.
 
 ## Install
 
