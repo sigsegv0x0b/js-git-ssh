@@ -12,6 +12,34 @@ npm install
 
 `.npmrc` sets `omit=optional`, so `ssh2`'s optional native helpers are never built — the install stays pure-JS.
 
+## Using this SSH transport with your own isomorphic-git code
+
+If you're driving `isomorphic-git` directly in another Node program — not through jsgit's own `shallowClone`/`shallowPush`/etc. — `src/ssh-http-client.js` exposes the SSH transport as a plain isomorphic-git `http` client you can pass into any `isomorphic-git` call:
+
+```js
+import fs from 'node:fs';
+import git from 'isomorphic-git';
+import { createSshHttpClient } from './src/ssh-http-client.js';
+
+const { http, url, dispose } = createSshHttpClient({ url: 'git@github.com:org/repo.git' });
+
+await git.clone({ fs, http, url, dir: './repo', depth: 1 });   // closes its own connection when done
+await git.push({ fs, http, url, dir: './repo', ref: 'main' }); // same client, a brand-new connection
+
+const refs = await git.listServerRefs({ http, url });          // discover-only: no POST, so...
+await dispose();                                                // ...call this or the connection lingers
+```
+
+`createSshHttpClient()` accepts the same connection options as `jsgit clone`/`jsgit push` (`username`, `identityFile`, `passphrase`, `trustNewHosts`, `knownHostsPath`, `onProgress`).
+
+**Connection lifecycle is per-operation, not persistent** — deliberately, so nothing needs to be tracked or closed across a whole program's lifetime the way a normal `http` client's keep-alive connection would be:
+- `git.clone`/`git.fetch`/`git.push` each open a fresh SSH connection and close it automatically once that operation's response has been fully read — success or failure, it doesn't linger.
+- The same `http`/`url` pair can be reused for as many separate operations as you like; each one gets its own connection, not a shared/persistent one.
+- **Exception:** isomorphic-git's discover-only calls (`git.listServerRefs`, `getRemoteInfo`/`getRemoteInfo2`) issue a request but never a follow-up, so there's no "operation finished" moment to hook a close onto. Call the client's `dispose()` after one of these if no further clone/fetch/push on the same client is coming — otherwise that connection is left open indefinitely. A subsequent GET on the same client (another discover-only call, or the start of a clone/fetch/push) also closes it automatically, so this only matters for the last operation on a client.
+- Not safe for concurrent operations on one client instance — it tracks a single in-flight connection, and a second concurrent operation will tear down the first's. Create a separate `createSshHttpClient()` call per concurrent operation.
+
+See `examples/` for a full walkthrough (sparse clone, branch, add, commit, push) built entirely on plain `isomorphic-git` calls plus this transport.
+
 ## CLI
 
 ```sh
@@ -236,34 +264,6 @@ jsgit push origin --delete feature/x   # equivalent
 ### Host key verification
 
 All commands verify the server's host key against `~/.ssh/known_hosts` (hashed and plaintext entries, `[host]:port` form supported). By default, an unknown host is refused. Pass `--trust-new-hosts` to trust-on-first-use: the key is verified and appended to `known_hosts`. A host whose key **changed** from what's on record is always a hard failure — `--trust-new-hosts` never overrides that, since a changed key on an already-known host is the actual thing TOFU exists to catch.
-
-## Using this SSH transport with your own isomorphic-git code
-
-If you're driving `isomorphic-git` directly in another Node program — not through jsgit's own `shallowClone`/`shallowPush`/etc. — `src/ssh-http-client.js` exposes the SSH transport as a plain isomorphic-git `http` client you can pass into any `isomorphic-git` call:
-
-```js
-import fs from 'node:fs';
-import git from 'isomorphic-git';
-import { createSshHttpClient } from './src/ssh-http-client.js';
-
-const { http, url, dispose } = createSshHttpClient({ url: 'git@github.com:org/repo.git' });
-
-await git.clone({ fs, http, url, dir: './repo', depth: 1 });   // closes its own connection when done
-await git.push({ fs, http, url, dir: './repo', ref: 'main' }); // same client, a brand-new connection
-
-const refs = await git.listServerRefs({ http, url });          // discover-only: no POST, so...
-await dispose();                                                // ...call this or the connection lingers
-```
-
-`createSshHttpClient()` accepts the same connection options as `jsgit clone`/`jsgit push` (`username`, `identityFile`, `passphrase`, `trustNewHosts`, `knownHostsPath`, `onProgress`).
-
-**Connection lifecycle is per-operation, not persistent** — deliberately, so nothing needs to be tracked or closed across a whole program's lifetime the way a normal `http` client's keep-alive connection would be:
-- `git.clone`/`git.fetch`/`git.push` each open a fresh SSH connection and close it automatically once that operation's response has been fully read — success or failure, it doesn't linger.
-- The same `http`/`url` pair can be reused for as many separate operations as you like; each one gets its own connection, not a shared/persistent one.
-- **Exception:** isomorphic-git's discover-only calls (`git.listServerRefs`, `getRemoteInfo`/`getRemoteInfo2`) issue a request but never a follow-up, so there's no "operation finished" moment to hook a close onto. Call the client's `dispose()` after one of these if no further clone/fetch/push on the same client is coming — otherwise that connection is left open indefinitely. A subsequent GET on the same client (another discover-only call, or the start of a clone/fetch/push) also closes it automatically, so this only matters for the last operation on a client.
-- Not safe for concurrent operations on one client instance — it tracks a single in-flight connection, and a second concurrent operation will tear down the first's. Create a separate `createSshHttpClient()` call per concurrent operation.
-
-See `examples/` for a full walkthrough (sparse clone, branch, add, commit, push) built entirely on plain `isomorphic-git` calls plus this transport.
 
 ## Library usage
 
